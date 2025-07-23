@@ -1,0 +1,38 @@
+[package]
+name = "robstride-driver"
+version = "0.1.0"
+edition = "2021"
+authors = ["K-Scale Labs"]
+license = "MIT"
+description = "Robstride Servo Driver"
+repository = "https://github.com/kscalelabs/robstride-driver"
+keywords = ["robotics", "can", "actuator", "robstride"]
+categories = ["hardware-support", "robotics"]
+
+[lib]
+name = "robstride_driver"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+socket2 = "0.5"
+tokio = { version = "1", features = ["net", "io-util", "macros", "rt-multi-thread", "time"] }
+bytemuck = { version = "1.18", features = ["derive", "must_cast"] }
+tracing = "0.1"
+libc = "0.2"
+thiserror = "1.0"
+
+# Optional Python bindings
+pyo3 = { version = "0.20", features = ["extension-module"], optional = true }
+
+[dev-dependencies]
+tracing-subscriber = "0.3"
+tokio-test = "0.4"
+hex = "0.4"
+
+[features]
+default = []
+python = ["pyo3"]
+
+[[example]]
+name = "scan_actuators"
+required-features = []

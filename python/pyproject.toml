@@ -1,0 +1,29 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "robstride-driver"
+version = "0.1.0"
+description = "Python bindings for Robstride actuator driver"
+authors = [{name = "K-Scale Labs"}]
+license = {text = "MIT"}
+requires-python = ">=3.7"
+dependencies = [
+    "tabulate",
+]
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+]
+
+[project.scripts]
+robstride-param-dump = "param_dump:main"
+robstride-scan = "scan_actuators:main"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+module-name = "robstride_driver"
+manifest-path = "../Cargo.toml"
+python-source = "python"
