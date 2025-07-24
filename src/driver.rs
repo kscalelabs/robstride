@@ -422,9 +422,10 @@ impl RobstrideDriver {
         // Collect all parameter responses
         let start_time = std::time::Instant::now();
         let mut parameters: HashMap<u16, Vec<u8>> = HashMap::new();
+        let mut last_received = std::time::Instant::now();
         
-        while start_time.elapsed() < Duration::from_millis(2000) {
-            match tokio::time::timeout(Duration::from_millis(100), self.can_interface.recv_frame()).await {
+        while start_time.elapsed() < Duration::from_millis(5000) {
+            match tokio::time::timeout(Duration::from_millis(200), self.can_interface.recv_frame()).await {
                 Ok(Ok(response_frame)) => {
                     let response: ActuatorResponse = response_frame.into();
                     match response {
@@ -436,13 +437,15 @@ impl RobstrideDriver {
                             parameters.entry(param_idx)
                                 .and_modify(|existing| existing.extend_from_slice(&data))
                                 .or_insert(data);
+                            
+                            last_received = std::time::Instant::now();
                         }
                         _ => continue,
                     }
                 }
                 _ => {
-                    // If we got some parameters and timeout, break
-                    if !parameters.is_empty() {
+                    // Only break if we haven't received anything for 1 second AND we have some parameters
+                    if !parameters.is_empty() && last_received.elapsed() > Duration::from_millis(1000) {
                         break;
                     }
                 }

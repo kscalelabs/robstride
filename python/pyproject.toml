@@ -8,22 +8,34 @@ version = "0.1.0"
 description = "Python bindings for Robstride actuator driver"
 authors = [{name = "K-Scale Labs"}]
 license = {text = "MIT"}
-requires-python = ">=3.7"
+requires-python = ">=3.12"
 dependencies = [
     "tabulate",
+    "click>=8.0.0",
 ]
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Scientific/Engineering :: Interface Engine/Protocol Translators",
+    "Topic :: System :: Hardware :: Hardware Drivers",
 ]
 
 [project.scripts]
+robstride = "robstride_driver.cli:cli"
 robstride-param-dump = "param_dump:main"
 robstride-scan = "scan_actuators:main"
 
+[project.urls]
+Homepage = "https://github.com/kscalelabs/robstride"
+Repository = "https://github.com/kscalelabs/robstride"
+Issues = "https://github.com/kscalelabs/robstride/issues"
+
+
 [tool.maturin]
-features = ["pyo3/extension-module"]
+features = ["pyo3/extension-module", "python"]
 module-name = "robstride_driver"
 manifest-path = "../Cargo.toml"
-python-source = "python"
+python-source = "."
