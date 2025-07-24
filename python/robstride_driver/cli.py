@@ -455,19 +455,42 @@ def sine_test(ctx, ids, amplitude, frequency, duration, kp, kd):
 def display_parameters_table(all_parameters, actuator_interfaces, servo_types, name_filter, single_param):
     """Display parameters using parameter maps with tabulate"""
     
-    # Get all unique parameter indices, filtered by known parameters
-    all_param_indices = set()
-    for actuator_id, params in all_parameters.items():
-        servo_type = servo_types.get(actuator_id)
-        if servo_type:
-            param_map = get_parameter_map(servo_type)
-            known_params = {idx for idx in params.keys() if idx in param_map}
-            all_param_indices.update(known_params)
-        else:
-            all_param_indices.update(params.keys())
+    # Check if we have multiple different servo types
+    unique_servo_types = set(servo_types.values())
+    is_mixed_servo_types = len(unique_servo_types) > 1
+    
+    if is_mixed_servo_types:
+        # Get common parameters + overrides (same parameter indices across types)
+        from parameter_map import get_common_parameters, TYPE_SPECIFIC_OVERRIDES
+        common_params = get_common_parameters()
+        
+        # Collect all override parameter indices across servo types
+        override_params = set()
+        for servo_type in unique_servo_types:
+            if servo_type in TYPE_SPECIFIC_OVERRIDES:
+                override_params.update(TYPE_SPECIFIC_OVERRIDES[servo_type].keys())
+        
+        # Use common params + override params, filtered by what we actually have data for
+        available_params = set()
+        for params in all_parameters.values():
+            available_params.update(params.keys())
+        
+        target_params = (set(common_params.keys()) | override_params) & available_params
+        
+    else:
+        # Single servo type - show all parameters as before
+        target_params = set()
+        for actuator_id, params in all_parameters.items():
+            servo_type = servo_types.get(actuator_id)
+            if servo_type:
+                param_map = get_parameter_map(servo_type)
+                known_params = {idx for idx in params.keys() if idx in param_map}
+                target_params.update(known_params)
+            else:
+                target_params.update(params.keys())
     
     # Apply name filter
-    filtered_indices = all_param_indices
+    filtered_indices = target_params
     if name_filter:
         filter_pattern = name_filter.lower()
         filtered_indices = set()
@@ -476,14 +499,14 @@ def display_parameters_table(all_parameters, actuator_interfaces, servo_types, n
             servo_type = servo_types.get(actuator_id)
             if servo_type:
                 param_map = get_parameter_map(servo_type)
-                for param_idx in all_param_indices:
+                for param_idx in target_params:
                     if param_idx in param_map:
                         name = param_map[param_idx][0].lower()
                         desc = param_map[param_idx][5].lower()
                         if filter_pattern in name or filter_pattern in desc:
                             filtered_indices.add(param_idx)
         
-        click.echo(f"Filtering parameters containing '{name_filter}': {len(filtered_indices)}/{len(all_param_indices)} parameters")
+        click.echo(f"Filtering parameters containing '{name_filter}': {len(filtered_indices)}/{len(target_params)} parameters")
     
     # Build table data
     sorted_actuator_ids = sorted(all_parameters.keys())
@@ -508,7 +531,7 @@ def display_parameters_table(all_parameters, actuator_interfaces, servo_types, n
         
         row = [f"0x{param_index:04X}", description, param_type, access_mode]
         
-        # Add decoded values for each actuator
+        # Add decoded value for each actuator
         for actuator_id in sorted_actuator_ids:
             if param_index in all_parameters[actuator_id]:
                 raw_bytes = all_parameters[actuator_id][param_index]
@@ -525,16 +548,24 @@ def display_parameters_table(all_parameters, actuator_interfaces, servo_types, n
         
         table_data.append(row)
     
-    # Display with servo type info
-    headers = ["Code", "Description", "Type", "Access"] + [f"ID_{aid}" for aid in sorted_actuator_ids]
+    # Build headers with servo type in header name
+    headers = ["Code", "Description", "Type", "Access"]
+    for aid in sorted_actuator_ids:
+        servo_type = servo_types.get(aid, "UNK")
+        headers.append(f"ID{aid}_{servo_type}")
     
-    servo_info = [f"ID_{aid}({servo_types.get(aid, '?')})" for aid in sorted_actuator_ids]
-    click.echo(f"Servo types: {', '.join(servo_info)}")
     click.echo(f"Found {len(sorted_actuator_ids)} actuators with {len(filtered_indices)} parameters")
-    click.echo("=" * 80)
+    click.echo("=" * 100)
     
     click.echo(tabulate(table_data, headers=headers, tablefmt="simple", 
                       maxcolwidths=[None, 40, 8, 6] + [15] * len(sorted_actuator_ids)))
+    
+    # Show warning for mixed servo types
+    if is_mixed_servo_types:
+        total_params_available = len(set().union(*[params.keys() for params in all_parameters.values()]))
+        click.secho(f"\nWARNING: Mixed servo types detected. Showing only {len(filtered_indices)} common/override parameters out of {total_params_available} total available parameters.", 
+                   fg='yellow', bold=True)
+
 
 
 def display_parameters_raw(all_parameters, actuator_interfaces):
