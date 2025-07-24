@@ -380,7 +380,7 @@ def dump(ctx, ids, param, output_format, filter):
         display_parameters_json(valid_actuators, actuator_interfaces, servo_types)
     else:  # table
         if any(servo_types.values()):
-            display_parameters_table_new(valid_actuators, actuator_interfaces, servo_types, filter, param)
+            display_parameters_table(valid_actuators, actuator_interfaces, servo_types, filter, param)
 
 
 
@@ -452,7 +452,7 @@ def sine_test(ctx, ids, amplitude, frequency, duration, kp, kd):
     click.echo("Sine test completed")
 
 
-def display_parameters_table_new(all_parameters, actuator_interfaces, servo_types, name_filter, single_param):
+def display_parameters_table(all_parameters, actuator_interfaces, servo_types, name_filter, single_param):
     """Display parameters using parameter maps with tabulate"""
     
     # Get all unique parameter indices, filtered by known parameters
@@ -479,7 +479,8 @@ def display_parameters_table_new(all_parameters, actuator_interfaces, servo_type
                 for param_idx in all_param_indices:
                     if param_idx in param_map:
                         name = param_map[param_idx][0].lower()
-                        if filter_pattern in name:
+                        desc = param_map[param_idx][5].lower()
+                        if filter_pattern in name or filter_pattern in desc:
                             filtered_indices.add(param_idx)
         
         click.echo(f"Filtering parameters containing '{name_filter}': {len(filtered_indices)}/{len(all_param_indices)} parameters")
@@ -490,9 +491,9 @@ def display_parameters_table_new(all_parameters, actuator_interfaces, servo_type
     
     for param_index in sorted(filtered_indices):
         # Get parameter info from first actuator with detected servo type
-        param_name = f"Unknown_{param_index:04X}"
         param_type = "unknown"
         access_mode = "?"
+        description = f"Unknown parameter 0x{param_index:04X}"
         
         for actuator_id in sorted_actuator_ids:
             servo_type = servo_types.get(actuator_id)
@@ -500,12 +501,12 @@ def display_parameters_table_new(all_parameters, actuator_interfaces, servo_type
                 param_map = get_parameter_map(servo_type)
                 if param_index in param_map:
                     name, dtype, access, min_val, max_val, desc = param_map[param_index]
-                    param_name = name
                     param_type = dtype
                     access_mode = access
+                    description = desc
                     break
         
-        row = [f"0x{param_index:04X}", param_name, param_type, access_mode]
+        row = [f"0x{param_index:04X}", description, param_type, access_mode]
         
         # Add decoded values for each actuator
         for actuator_id in sorted_actuator_ids:
@@ -525,7 +526,7 @@ def display_parameters_table_new(all_parameters, actuator_interfaces, servo_type
         table_data.append(row)
     
     # Display with servo type info
-    headers = ["Code", "Name", "Type", "Access"] + [f"ID_{aid}" for aid in sorted_actuator_ids]
+    headers = ["Code", "Description", "Type", "Access"] + [f"ID_{aid}" for aid in sorted_actuator_ids]
     
     servo_info = [f"ID_{aid}({servo_types.get(aid, '?')})" for aid in sorted_actuator_ids]
     click.echo(f"Servo types: {', '.join(servo_info)}")
@@ -533,7 +534,7 @@ def display_parameters_table_new(all_parameters, actuator_interfaces, servo_type
     click.echo("=" * 80)
     
     click.echo(tabulate(table_data, headers=headers, tablefmt="simple", 
-                      maxcolwidths=[None, 20, 8, 6] + [15] * len(sorted_actuator_ids)))
+                      maxcolwidths=[None, 40, 8, 6] + [15] * len(sorted_actuator_ids)))
 
 
 def display_parameters_raw(all_parameters, actuator_interfaces):
@@ -567,6 +568,9 @@ def display_parameters_json(all_parameters, actuator_interfaces, servo_types):
                             'name': name,
                             'type': param_type,
                             'access': access,
+                            'description': desc,
+                            'min_value': min_val,
+                            'max_value': max_val,
                             'value': decoded,
                             'raw_hex': raw_bytes.hex().upper()
                         }
@@ -576,6 +580,7 @@ def display_parameters_json(all_parameters, actuator_interfaces, servo_types):
             
             # Fallback to raw display
             result[actuator_id]['parameters'][f"0x{param_idx:04X}"] = {
+                'description': 'Unknown parameter',
                 'raw_hex': raw_bytes.hex().upper()
             }
     
