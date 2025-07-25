@@ -57,8 +57,8 @@ def detect_servo_type_from_version(version_string: str) -> str:
 # Format: parameter_index: (name, data_type, access_mode, min_value, max_value, description)
 COMMON_PARAM_MAP = {
     # Device identification (identical across all types)
-    0x0000: ("Name",                "String", "RW", None, None, "Device name"),
-    0x0001: ("BarCode",             "String", "RW", None, None, "Device barcode"),
+    #0x0000: ("Name",                "String", "RW", None, None, "Device name"),
+    #0x0001: ("BarCode",             "String", "RW", None, None, "Device barcode"),
     
     # Boot / firmware info (identical across all types)
     0x1000: ("BootCodeVersion",     "String", "R", None, None, "Boot code version"),
