@@ -49,7 +49,7 @@ impl ActuatorClient {
     pub fn build_request(&self, params: &ActuatorRequestParams) -> ActuatorRequest {
         use crate::protocol::{
             ControlCommandRequest, FeedbackRequest, MotorEnableRequest, ObtainIdRequest,
-            ZeroPositionRequest,
+            ZeroPositionRequest, SingleParameterReadRequest, SingleParameterWriteRequest, MotorDataSaveRequest
         };
 
         match params {
@@ -64,6 +64,15 @@ impl ActuatorClient {
             }
             ActuatorRequestParams::ReadAllParams(mcu_uid) => {
                 ActuatorRequest::ReadAllParams(ReadAllParamsRequest::new(self.host_id as u8, self.actuator_can_id, *mcu_uid))
+            }
+            ActuatorRequestParams::SingleParameterRead(param_index) => {
+                ActuatorRequest::SingleParameterRead(SingleParameterReadRequest::new(self.host_id, self.actuator_can_id, *param_index))
+            }
+            ActuatorRequestParams::SingleParameterWrite(param_index, data) => {
+                ActuatorRequest::SingleParameterWrite(SingleParameterWriteRequest::new(self.host_id, self.actuator_can_id, *param_index, *data))
+            }
+            ActuatorRequestParams::MotorDataSave => {
+                ActuatorRequest::MotorDataSave(MotorDataSaveRequest::new(self.host_id, self.actuator_can_id))
             }
             ActuatorRequestParams::Control(cmd) => {
                 ActuatorRequest::Control(ControlCommandRequest::new(
@@ -128,6 +137,11 @@ impl ActuatorClient {
             }
             ActuatorResponse::ReadAllParams(_) => {
                 // ReadAllParams responses are handled at the driver level, not by individual clients
+                self.state = ActuatorClientState::Ready;
+                Ok(None)
+            }
+            ActuatorResponse::SingleParameterRead(_) => {
+                // SingleParameterRead responses are handled at the driver level, not by individual clients
                 self.state = ActuatorClientState::Ready;
                 Ok(None)
             }

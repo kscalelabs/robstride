@@ -219,29 +219,45 @@ def disable(ctx, ids):
 
 @cli.command()
 @click.option('--ids', required=True, help='Comma-separated actuator IDs (e.g., 11,12,13)')
+@click.option('--standard', is_flag=True, help='Use standard zero (0 to 2π range) instead of default centered (-π to +π)')
 @click.pass_context
-def zero(ctx, ids):
-    """Zero the position of actuators (set current position as zero)"""
+def zero(ctx, ids, standard):
+    """Zero position actuators (set current position as zero)
+    
+    By default uses centered zero (-π to +π range) which sets zero_sta=1, saves parameters, then zeros.
+    Use --standard flag for 0 to 2π range which sets zero_sta=0, saves parameters, then zeros.
+    """
     interfaces = ctx.obj['interfaces']
     actuator_ids = parse_ids(ids)
     
-    click.echo(f"Zeroing position for actuators: {actuator_ids}")
+    if standard:
+        click.echo(f"Setting standard zero (0 to 2π) for actuators: {actuator_ids}")
+        click.echo("This will: 1) Set zero_sta=0, 2) Save parameters, 3) Zero position")
+    else:
+        click.echo(f"Setting centered zero (-π to +π) for actuators: {actuator_ids}")
+        click.echo("This will: 1) Set zero_sta=1, 2) Save parameters, 3) Zero position")
     
     success_count = 0
+    
     for actuator_id in actuator_ids:
         result = get_actuator_driver(actuator_id, interfaces)
         if result:
             driver, interface = result
             try:
-                driver.zero_actuator(actuator_id)
-                click.echo(f"Actuator {actuator_id} position zeroed on {interface}")
+                if standard:
+                    driver.zero_actuator_standard(actuator_id)
+                    click.echo(f"Actuator {actuator_id} standard zero completed on {interface}")
+                else:
+                    driver.zero_actuator_centered(actuator_id)
+                    click.echo(f"Actuator {actuator_id} centered zero completed on {interface}")
+                
                 success_count += 1
             except Exception as e:
                 click.echo(f"Actuator {actuator_id} zero failed: {e}")
         else:
             click.echo(f"Actuator {actuator_id} not found on any interface")
     
-    click.echo(f"Zeroed {success_count}/{len(actuator_ids)} actuators")
+    click.echo(f"Zero completed for {success_count}/{len(actuator_ids)} actuators")
 
 
 @cli.command()
@@ -409,6 +425,168 @@ def dump(ctx, ids, param, output_format, filter):
         if any(servo_types.values()):
             display_parameters_table(valid_actuators, actuator_interfaces, servo_types, filter, param)
 
+# ... existing imports and code ...
+
+@cli.command()
+@click.option('--ids', required=True, help='Comma-separated actuator IDs (e.g., 11,12,13)')
+@click.option('--params', help='Comma-separated parameter indices in hex (e.g., 0x7005,0x7019,0x701C). If not specified, reads common parameters.')
+@click.option('--format', 'output_format', type=click.Choice(['table', 'json']), default='table', help='Output format')
+@click.pass_context
+def read(ctx, ids, params, output_format):
+    """Read individual parameters from actuators using single parameter read"""
+    interfaces = ctx.obj['interfaces']
+    actuator_ids = parse_ids(ids)
+    
+    # Default parameters to read if none specified
+    default_params = [
+        0x7005,  # run_mode
+        0x7006,  # iq_ref
+        0x700A,  # spd_ref
+        0x700B,  # limit_torque
+        0x7010,  # cur_kp
+        0x7011,  # cur_ki
+        0x7014,  # cur_filt_gain
+        0x7016,  # loc_ref
+        0x7017,  # limit_spd
+        0x7018,  # limit_cur
+        0x7019,  # mechPos
+        0x701A,  # iqf
+        0x701B,  # mechVel
+        0x701C,  # VBUS
+        0x701E,  # loc_kp
+        0x701F,  # spd_kp
+        0x7020,  # spd_ki
+        0x7021,  # spd_filt_gain
+        0x7022,  # acc_rad
+        0x7024,  # vel_max
+        0x7025,  # acc_set
+    ]
+    
+    if params:
+        # Parse hex parameters
+        try:
+            param_indices = [int(p.strip(), 16) if p.strip().startswith('0x') else int(p.strip()) 
+                           for p in params.split(',')]
+        except ValueError as e:
+            click.echo(f"Error parsing parameter indices: {e}", err=True)
+            return
+    else:
+        param_indices = default_params
+    
+    # Parameter info for display
+    param_info = {
+        0x7005: ("run_mode", "Operation mode (0=op, 1=pos PP, 2=vel, 3=op, 5=pos CSP)", ""),
+        0x7006: ("iq_ref", "Current mode Iq command", "A"),
+        0x700A: ("spd_ref", "Rotational speed command", "rad/s"),
+        0x700B: ("limit_torque", "Torque limit", "Nm"),
+        0x7010: ("cur_kp", "Current loop Kp", ""),
+        0x7011: ("cur_ki", "Current loop Ki", ""),
+        0x7014: ("cur_filt_gain", "Current filter gain", ""),
+        0x7016: ("loc_ref", "Position mode angle instruction", "rad"),
+        0x7017: ("limit_spd", "Location mode CSP speed limit", "rad/s"),
+        0x7018: ("limit_cur", "Velocity/position mode current limit", "A"),
+        0x7019: ("mechPos", "Mechanical angle of loading coil", "rad"),
+        0x701A: ("iqf", "Iq filter", "A"),
+        0x701B: ("mechVel", "Speed of the load", "rad/s"),
+        0x701C: ("VBUS", "Bus voltage", "V"),
+        0x701E: ("loc_kp", "Position loop Kp", ""),
+        0x701F: ("spd_kp", "Speed loop Kp", ""),
+        0x7020: ("spd_ki", "Speed loop Ki", ""),
+        0x7021: ("spd_filt_gain", "Speed filter gain", ""),
+        0x7022: ("acc_rad", "Velocity mode acceleration", "rad/s²"),
+        0x7024: ("vel_max", "Location mode PP speed", "rad/s"),
+        0x7025: ("acc_set", "Location mode PP acceleration", "rad/s²"),
+    }
+    
+    all_results = {}
+    
+    for actuator_id in actuator_ids:
+        click.echo(f"Reading parameters from actuator {actuator_id}...")
+        result = get_actuator_driver(actuator_id, interfaces)
+        if not result:
+            all_results[actuator_id] = {'error': f'Not found on any interface ({", ".join(interfaces)})'}
+            continue
+            
+        driver, interface = result
+        actuator_results = {'interface': interface, 'parameters': {}}
+        
+        try:
+            for param_idx in param_indices:
+                try:
+                    value = driver.read_single_parameter(actuator_id, param_idx)
+                    if value is not None:
+                        actuator_results['parameters'][param_idx] = {
+                            'value': value,
+                            'info': param_info.get(param_idx, (f"0x{param_idx:04X}", "Unknown", ""))
+                        }
+                    else:
+                        actuator_results['parameters'][param_idx] = {
+                            'value': None,
+                            'info': param_info.get(param_idx, (f"0x{param_idx:04X}", "Unknown", "")),
+                            'error': 'No response'
+                        }
+                except Exception as e:
+                    actuator_results['parameters'][param_idx] = {
+                        'value': None,
+                        'info': param_info.get(param_idx, (f"0x{param_idx:04X}", "Unknown", "")),
+                        'error': str(e)
+                    }
+                
+                # Small delay between reads
+                time.sleep(0.01)
+                
+        except Exception as e:
+            actuator_results['error'] = str(e)
+            
+        all_results[actuator_id] = actuator_results
+    
+    # Output results
+    if output_format == 'json':
+        click.echo(json.dumps(all_results, indent=2))
+    else:
+        # Table format
+        for actuator_id, results in all_results.items():
+            click.echo(f"\n=== Actuator {actuator_id} ===")
+            
+            if 'error' in results:
+                click.echo(f"Error: {results['error']}")
+                continue
+                
+            click.echo(f"Interface: {results['interface']}")
+            
+            # Prepare table data
+            table_data = []
+            for param_idx, param_data in results['parameters'].items():
+                name, desc, unit = param_data['info']
+                
+                if 'error' in param_data:
+                    value_str = f"ERROR: {param_data['error']}"
+                elif param_data['value'] is None:
+                    value_str = "No response"
+                else:
+                    value = param_data['value']
+                    # Format based on parameter type
+                    if param_idx in [0x7005, 0x7029]:  # uint8 parameters
+                        value_str = f"{int(value)}"
+                    elif param_idx == 0x7026:  # uint16 parameter
+                        value_str = f"{int(value)}"
+                    elif param_idx == 0x7028:  # uint32 parameter
+                        value_str = f"{int(value)}"
+                    else:  # float parameters
+                        value_str = f"{value:.4f}"
+                    
+                    if unit:
+                        value_str += f" {unit}"
+                
+                table_data.append([
+                    f"0x{param_idx:04X}",
+                    name,
+                    desc,
+                    value_str
+                ])
+            
+            headers = ["Index", "Name", "Description", "Value"]
+            click.echo(tabulate(table_data, headers=headers, tablefmt="grid"))
 
 
 @cli.command()

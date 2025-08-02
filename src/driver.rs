@@ -1,5 +1,3 @@
-//! High-level Robstride driver interface - robot agnostic
-
 use crate::actuator_types::RobstrideActuatorType;
 use crate::can::CanInterface;
 use crate::client::ActuatorClient;
@@ -384,6 +382,175 @@ impl RobstrideDriver {
         
         Ok(None)
     }
+
+    /// Read a single parameter from actuator using Communication type 17
+    pub async fn read_single_parameter(&mut self, actuator_id: u8, param_index: u16) -> crate::Result<Option<crate::parameters::ParameterValue>> {
+        use crate::protocol::{SingleParameterReadRequest, ActuatorRequest, ActuatorResponse};
+        use crate::parameters::{get_parameter_table, ParameterValue};
+        
+        // Create and send the single parameter read request
+        let request = SingleParameterReadRequest::new(0xFD, actuator_id, param_index);
+        let frame: crate::can::CanFrame = ActuatorRequest::SingleParameterRead(request).into();
+        self.can_interface.send_frame(&frame).await?;
+        
+        // Wait for response
+        let start_time = std::time::Instant::now();
+        while start_time.elapsed() < Duration::from_millis(1000) {
+            match tokio::time::timeout(Duration::from_millis(100), self.can_interface.recv_frame()).await {
+                Ok(Ok(response_frame)) => {
+                    let response: ActuatorResponse = response_frame.into();
+                    match response {
+                        ActuatorResponse::SingleParameterRead(param_resp) => {
+                            if param_resp.param_index == param_index {
+                                if param_resp.is_success() {
+                                    // Get parameter info from table to determine type
+                                    let param_table = get_parameter_table();
+                                    if let Some(param_info) = param_table.get(&param_index) {
+                                        let param_bytes = param_resp.param_data_bytes();
+                                        return Ok(ParameterValue::from_bytes(&param_bytes, param_info.param_type));
+                                    } else {
+                                        return Err(crate::RobstrideError::Protocol(
+                                            format!("Unknown parameter index: 0x{:04X}", param_index)
+                                        ));
+                                    }
+                                } else {
+                                    return Err(crate::RobstrideError::Protocol(
+                                        format!("Parameter read failed for index: 0x{:04X}", param_index)
+                                    ));
+                                }
+                            }
+                        }
+                        _ => continue,
+                    }
+                }
+                _ => break,
+            }
+        }
+        
+        Ok(None)
+    }
+
+    pub async fn read_single_parameter_raw(&mut self, actuator_id: u8, param_index: u16) -> crate::Result<Option<Vec<u8>>> {
+        use crate::protocol::{SingleParameterReadRequest, ActuatorRequest, ActuatorResponse};
+        
+        // Create and send the single parameter read request
+        let request = SingleParameterReadRequest::new(0xFD, actuator_id, param_index);
+        let frame: crate::can::CanFrame = ActuatorRequest::SingleParameterRead(request).into();
+        self.can_interface.send_frame(&frame).await?;
+        
+        // Wait for response
+        let start_time = std::time::Instant::now();
+        while start_time.elapsed() < Duration::from_millis(1000) {
+            match tokio::time::timeout(Duration::from_millis(100), self.can_interface.recv_frame()).await {
+                Ok(Ok(response_frame)) => {
+                    let response: ActuatorResponse = response_frame.into();
+                    match response {
+                        ActuatorResponse::SingleParameterRead(param_resp) => {
+                            if param_resp.param_index == param_index {
+                                if param_resp.is_success() {
+                                    return Ok(Some(param_resp.param_data_bytes().to_vec()));
+                                } else {
+                                    return Err(crate::RobstrideError::Protocol(
+                                        format!("Parameter read failed for index: 0x{:04X}", param_index)
+                                    ));
+                                }
+                            }
+                        }
+                        _ => continue,
+                    }
+                }
+                _ => break,
+            }
+        }
+        
+        Ok(None)
+    }
+
+    /// Write a single parameter to actuator using Communication type 18
+    pub async fn write_single_parameter_uint8(&mut self, actuator_id: u8, param_index: u16, value: u8) -> crate::Result<()> {
+        use crate::protocol::{SingleParameterWriteRequest, ActuatorRequest};
+        
+        let request = SingleParameterWriteRequest::new_uint8(0xFD, actuator_id, param_index, value);
+        let frame: crate::can::CanFrame = ActuatorRequest::SingleParameterWrite(request).into();
+        self.can_interface.send_frame(&frame).await?;
+
+        Ok(())
+    }
+
+    /// Write a single float parameter to actuator using Communication type 18
+    pub async fn write_single_parameter_float(&mut self, actuator_id: u8, param_index: u16, value: f32) -> crate::Result<()> {
+        use crate::protocol::{SingleParameterWriteRequest, ActuatorRequest};
+        
+        let request = SingleParameterWriteRequest::new_float(0xFD, actuator_id, param_index, value);
+        let frame: crate::can::CanFrame = ActuatorRequest::SingleParameterWrite(request).into();
+        self.can_interface.send_frame(&frame).await?;
+        
+        Ok(())
+    }
+
+    /// Save motor data using Communication type 22
+    pub async fn save_motor_data(&mut self, actuator_id: u8) -> crate::Result<()> {
+        use crate::protocol::{MotorDataSaveRequest, ActuatorRequest};
+        
+        let request = MotorDataSaveRequest::new(0xFD, actuator_id);
+        let frame: crate::can::CanFrame = ActuatorRequest::MotorDataSave(request).into();
+        self.can_interface.send_frame(&frame).await?;
+
+        Ok(())
+    }
+
+    /// Helper method to wait for feedback response
+    async fn wait_for_feedback_response(&mut self, actuator_id: u8) -> crate::Result<()> {
+        use crate::protocol::ActuatorResponse;
+        
+        let start_time = std::time::Instant::now();
+        while start_time.elapsed() < Duration::from_millis(1000) {
+            match tokio::time::timeout(Duration::from_millis(100), self.can_interface.recv_frame()).await {
+                Ok(Ok(response_frame)) => {
+                    let response: ActuatorResponse = response_frame.into();
+                    match response {
+                        ActuatorResponse::Feedback(feedback) => {
+                            if feedback.actuator_can_id == actuator_id {
+                                return Ok(());
+                            }
+                        }
+                        _ => continue,
+                    }
+                }
+                _ => break,
+            }
+        }
+        
+        Err(crate::RobstrideError::Protocol("No feedback response received".into()))
+    }
+
+        /// Enhanced zero actuator that sets zero_sta to 1 for -π to +π range
+        pub async fn zero_actuator_centered(&mut self, actuator_id: u8) -> crate::Result<()> {
+            // Step 1: Set zero_sta to 1 (forces -π to +π range)
+            self.write_single_parameter_uint8(actuator_id, 0x7029, 1).await?;
+            
+            // Step 2: Save the parameter
+            self.save_motor_data(actuator_id).await?;
+            
+            // Step 3: Perform normal zero command
+            self.zero_actuator(actuator_id).await?;
+            
+            Ok(())
+        }
+    
+        /// Enhanced zero actuator that sets zero_sta to 0 for 0 to 2π range
+        pub async fn zero_actuator_standard(&mut self, actuator_id: u8) -> crate::Result<()> {
+            // Step 1: Set zero_sta to 0 (forces 0 to 2π range)
+            self.write_single_parameter_uint8(actuator_id, 0x7029, 0).await?;
+            
+            // Step 2: Save the parameter
+            self.save_motor_data(actuator_id).await?;
+            
+            // Step 3: Perform normal zero command
+            self.zero_actuator(actuator_id).await?;
+            
+            Ok(())
+        }
 
     /// Dump all parameters from actuator (for Python bindings)
     pub async fn dump_all_parameters(&mut self, actuator_id: u8) -> crate::Result<std::collections::HashMap<u16, Vec<u8>>> {

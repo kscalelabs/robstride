@@ -165,6 +165,145 @@ pub struct FeedbackResponse {
 
 impl RobstrideActuatorFrame for FeedbackResponse {}
 
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Pod, Zeroable)]
+#[repr(C, packed)]
+pub struct SingleParameterReadRequest {
+    pub actuator_can_id: u8,
+    pub host_id: u16,
+    mux: u8, /* 0x11 */
+    len: u8,
+    pad: u8,
+    res0: u8,
+    len8_dlc: u8,
+    pub param_index: u16, // Parameter index to read
+    reserved1: u16,       // Bytes 2-3: 00
+    reserved2: u32,       // Bytes 4-7: 00
+}
+
+impl RobstrideActuatorFrame for SingleParameterReadRequest {}
+
+impl SingleParameterReadRequest {
+    pub fn new(host_id: u16, actuator_can_id: u8, param_index: u16) -> Self {
+        Self {
+            mux: 0x11,
+            host_id,
+            actuator_can_id,
+            len: 8,
+            param_index,
+            reserved1: 0,
+            reserved2: 0,
+            ..Default::default()
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Pod, Zeroable)]
+#[repr(C, packed)]
+pub struct SingleParameterReadResponse {
+    pub host_id: u8,
+    pub actuator_can_id: u8,
+    pub status: u8,       // 0x00 = success, 0x01 = error
+    mux: u8,              /* 0x11 */
+    len: u8,
+    pad: u8,
+    res0: u8,
+    len8_dlc: u8,
+    pub param_index: u16, // Parameter index that was read
+    reserved: u16,        // Bytes 2-3: 00
+    pub param_data: u32,  // Bytes 4-7: Parameter data (little endian)
+}
+
+impl RobstrideActuatorFrame for SingleParameterReadResponse {}
+
+impl SingleParameterReadResponse {
+    /// Check if the parameter read was successful
+    pub fn is_success(&self) -> bool {
+        self.status == 0x00
+    }
+
+    /// Get parameter data as bytes (little endian)
+    pub fn param_data_bytes(&self) -> [u8; 4] {
+        self.param_data.to_le_bytes()
+    }
+}
+
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Pod, Zeroable)]
+#[repr(C, packed)]
+pub struct SingleParameterWriteRequest {
+    pub actuator_can_id: u8,
+    pub host_id: u16,
+    mux: u8, /* 0x12 */
+    len: u8,
+    pad: u8,
+    res0: u8,
+    len8_dlc: u8,
+    pub param_index: u16, // Parameter index to write
+    reserved: u16,        // Bytes 2-3: 00
+    pub param_data: u32,  // Bytes 4-7: Parameter data (little endian)
+}
+
+impl RobstrideActuatorFrame for SingleParameterWriteRequest {}
+
+impl SingleParameterWriteRequest {
+    pub fn new(host_id: u16, actuator_can_id: u8, param_index: u16, data: u32) -> Self {
+        Self {
+            mux: 0x12,
+            host_id,
+            actuator_can_id,
+            len: 8,
+            param_index,
+            reserved: 0,
+            param_data: data,
+            ..Default::default()
+        }
+    }
+
+    /// Create request for uint8 parameter
+    pub fn new_uint8(host_id: u16, actuator_can_id: u8, param_index: u16, value: u8) -> Self {
+        Self::new(host_id, actuator_can_id, param_index, value as u32)
+    }
+
+    /// Create request for uint16 parameter
+    pub fn new_uint16(host_id: u16, actuator_can_id: u8, param_index: u16, value: u16) -> Self {
+        Self::new(host_id, actuator_can_id, param_index, value as u32)
+    }
+
+    /// Create request for float parameter
+    pub fn new_float(host_id: u16, actuator_can_id: u8, param_index: u16, value: f32) -> Self {
+        Self::new(host_id, actuator_can_id, param_index, value.to_bits())
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Pod, Zeroable)]
+#[repr(C, packed)]
+pub struct MotorDataSaveRequest {
+    pub actuator_can_id: u8,
+    pub host_id: u16,
+    mux: u8, /* 0x16 */
+    len: u8,
+    pad: u8,
+    res0: u8,
+    len8_dlc: u8,
+    save_data: [u8; 8], // Fixed sequence: 01 02 03 04 05 06 07 08
+}
+
+impl RobstrideActuatorFrame for MotorDataSaveRequest {}
+
+impl MotorDataSaveRequest {
+    pub fn new(host_id: u16, actuator_can_id: u8) -> Self {
+        Self {
+            mux: 0x16,
+            host_id,
+            actuator_can_id,
+            len: 8,
+            save_data: [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
+            ..Default::default()
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Pod, Zeroable)]
 #[repr(C, packed)]
 pub struct ZeroPositionRequest {
@@ -207,6 +346,9 @@ pub enum ActuatorRequest {
     Feedback(FeedbackRequest),
     ReadAllParams(ReadAllParamsRequest),
     ZeroPosition(ZeroPositionRequest),
+    SingleParameterRead(SingleParameterReadRequest),
+    SingleParameterWrite(SingleParameterWriteRequest),
+    MotorDataSave(MotorDataSaveRequest),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -217,6 +359,9 @@ pub enum ActuatorRequestParams {
     Feedback,
     ReadAllParams(u64), // mcu_uid required
     ZeroPosition,
+    SingleParameterRead(u16),
+    SingleParameterWrite(u16, u32),
+    MotorDataSave,
 }
 
 #[derive(Debug, Clone)]
@@ -224,6 +369,7 @@ pub enum ActuatorResponse {
     ObtainId(ObtainIdResponse),
     Feedback(FeedbackResponse),
     ReadAllParams(ReadAllParamsResponse),
+    SingleParameterRead(SingleParameterReadResponse),
 }
 
 // Frame conversion implementations (exact from firmware)
@@ -247,6 +393,9 @@ impl From<ActuatorRequest> for CanFrame {
             ActuatorRequest::Feedback(req) => req.into(),
             ActuatorRequest::ReadAllParams(req) => req.into(),
             ActuatorRequest::ZeroPosition(req) => req.into(),
+            ActuatorRequest::SingleParameterRead(req) => req.into(),
+            ActuatorRequest::SingleParameterWrite(req) => req.into(),
+            ActuatorRequest::MotorDataSave(req) => req.into(),
         }
     }
 }
@@ -262,9 +411,13 @@ impl From<CanFrame> for ActuatorResponse {
             0x02 => {
                 ActuatorResponse::Feedback(bytemuck::must_cast::<CanFrame, FeedbackResponse>(frame))
             }
+            0x11 => {
+                ActuatorResponse::SingleParameterRead(bytemuck::must_cast::<CanFrame, SingleParameterReadResponse>(frame))
+            }
             0x13 => {
                 ActuatorResponse::ReadAllParams(bytemuck::must_cast::<CanFrame, ReadAllParamsResponse>(frame))
             }
+            
             _ => panic!("Unknown mux value: {}", mux),
         }
     }
@@ -280,6 +433,8 @@ pub fn actuator_can_id_from_response(frame: &CanFrame) -> u8 {
     match mux {
         0x00 => bytemuck::must_cast::<CanFrame, ObtainIdResponse>(*frame).actuator_can_id as u8,
         0x02 => bytemuck::must_cast::<CanFrame, FeedbackResponse>(*frame).actuator_can_id as u8,
+        0x11 => bytemuck::must_cast::<CanFrame, SingleParameterReadResponse>(*frame).actuator_can_id as u8,
+        0x13 => bytemuck::must_cast::<CanFrame, ReadAllParamsResponse>(*frame).actuator_can_id as u8,
         _ => {
             warn!(
                 "Unknown mux value: {} in actuator_can_id_from_response, returning 0x7F",
@@ -298,7 +453,10 @@ impl ActuatorRequest {
             Self::MotorEnable(_) => 0x02,
             Self::Feedback(_) => 0x02,
             Self::ReadAllParams(_) => 0x13,
-            Self::ZeroPosition(_) => 0x02, // Zero position returns feedback response
+            Self::ZeroPosition(_) => 0x02,
+            Self::SingleParameterRead(_) => 0x11,
+            Self::SingleParameterWrite(_) => 0x02,
+            Self::MotorDataSave(_) => 0x02,
         }
     }
 }

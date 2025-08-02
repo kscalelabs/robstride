@@ -227,6 +227,32 @@ pub fn get_parameter_table() -> HashMap<u16, ParameterInfo> {
         params.insert(0x3044, ParameterInfo { code: 0x3044, name: "fault8",           param_type: ParameterType::Uint8,  access: ParameterAccess::ReadOnly,  description: "Fault log entry 8" });
         params.insert(0x3045, ParameterInfo { code: 0x3045, name: "theta_mech_1",     param_type: ParameterType::Float,  access: ParameterAccess::ReadOnly,  description: "Mechanical angle θ1" });
     
-    
+        /* ───────────────────────────── Control mode parameters (0x7000) ─────────────────────── */
+        params.insert(0x7005, ParameterInfo { code: 0x7005, name: "run_mode",        param_type: ParameterType::Uint8,  access: ParameterAccess::ReadWrite, description: "Operation mode: 0=operation, 1=position PP, 2=velocity, 3=operation, 5=position CSP" });
+        params.insert(0x7006, ParameterInfo { code: 0x7006, name: "iq_ref",          param_type: ParameterType::Float,  access: ParameterAccess::ReadWrite, description: "Current mode Iq command (A)" });
+        params.insert(0x700A, ParameterInfo { code: 0x700A, name: "spd_ref",         param_type: ParameterType::Float,  access: ParameterAccess::ReadWrite, description: "Rotational speed command (rad/s)" });
+        params.insert(0x700B, ParameterInfo { code: 0x700B, name: "limit_torque",    param_type: ParameterType::Float,  access: ParameterAccess::ReadWrite, description: "Torque limit (Nm)" });
+        params.insert(0x7010, ParameterInfo { code: 0x7010, name: "cur_kp",          param_type: ParameterType::Float,  access: ParameterAccess::ReadWrite, description: "Current loop Kp" });
+        params.insert(0x7011, ParameterInfo { code: 0x7011, name: "cur_ki",          param_type: ParameterType::Float,  access: ParameterAccess::ReadWrite, description: "Current loop Ki" });
+        params.insert(0x7014, ParameterInfo { code: 0x7014, name: "cur_filt_gain",   param_type: ParameterType::Float,  access: ParameterAccess::ReadWrite, description: "Current filter gain" });
+        params.insert(0x7016, ParameterInfo { code: 0x7016, name: "loc_ref",         param_type: ParameterType::Float,  access: ParameterAccess::ReadWrite, description: "Position mode angle instruction (rad)" });
+        params.insert(0x7017, ParameterInfo { code: 0x7017, name: "limit_spd",       param_type: ParameterType::Float,  access: ParameterAccess::ReadWrite, description: "Location mode CSP speed limit (rad/s)" });
+        params.insert(0x7018, ParameterInfo { code: 0x7018, name: "limit_cur",       param_type: ParameterType::Float,  access: ParameterAccess::ReadWrite, description: "Velocity/position mode current limitation (A)" });
+        params.insert(0x7019, ParameterInfo { code: 0x7019, name: "mechPos",         param_type: ParameterType::Float,  access: ParameterAccess::ReadOnly,  description: "Mechanical angle of the loading coil (rad)" });
+        params.insert(0x701A, ParameterInfo { code: 0x701A, name: "iqf",             param_type: ParameterType::Float,  access: ParameterAccess::ReadOnly,  description: "Iq filter (A)" });
+        params.insert(0x701B, ParameterInfo { code: 0x701B, name: "mechVel",         param_type: ParameterType::Float,  access: ParameterAccess::ReadOnly,  description: "Speed of the load (rad/s)" });
+        params.insert(0x701C, ParameterInfo { code: 0x701C, name: "VBUS",            param_type: ParameterType::Float,  access: ParameterAccess::ReadOnly,  description: "Bus voltage (V)" });
+        params.insert(0x701E, ParameterInfo { code: 0x701E, name: "loc_kp",          param_type: ParameterType::Float,  access: ParameterAccess::ReadWrite, description: "Position loop Kp" });
+        params.insert(0x701F, ParameterInfo { code: 0x701F, name: "spd_kp",          param_type: ParameterType::Float,  access: ParameterAccess::ReadWrite, description: "Speed loop Kp" });
+        params.insert(0x7020, ParameterInfo { code: 0x7020, name: "spd_ki",          param_type: ParameterType::Float,  access: ParameterAccess::ReadWrite, description: "Speed loop Ki" });
+        params.insert(0x7021, ParameterInfo { code: 0x7021, name: "spd_filt_gain",   param_type: ParameterType::Float,  access: ParameterAccess::ReadWrite, description: "Speed filter gain" });
+        params.insert(0x7022, ParameterInfo { code: 0x7022, name: "acc_rad",         param_type: ParameterType::Float,  access: ParameterAccess::ReadWrite, description: "Velocity mode acceleration (rad/s²)" });
+        params.insert(0x7024, ParameterInfo { code: 0x7024, name: "vel_max",         param_type: ParameterType::Float,  access: ParameterAccess::ReadWrite, description: "Location mode PP speed (rad/s)" });
+        params.insert(0x7025, ParameterInfo { code: 0x7025, name: "acc_set",         param_type: ParameterType::Float,  access: ParameterAccess::ReadWrite, description: "Location mode PP acceleration (rad/s²)" });
+        params.insert(0x7026, ParameterInfo { code: 0x7026, name: "EPScan_time",     param_type: ParameterType::Uint16, access: ParameterAccess::ReadWrite, description: "Report time (10ms units)" });
+        params.insert(0x7028, ParameterInfo { code: 0x7028, name: "canTimeout",      param_type: ParameterType::Uint32, access: ParameterAccess::ReadWrite, description: "CAN timeout threshold (20000 = 1s)" });
+        params.insert(0x7029, ParameterInfo { code: 0x7029, name: "zero_sta",        param_type: ParameterType::Uint8,  access: ParameterAccess::ReadWrite, description: "Zero flag bit: 0=0-2π, 1=-π-π" });
+
+        
         params
     }

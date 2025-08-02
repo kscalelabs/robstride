@@ -212,6 +212,30 @@ impl PyRobstrideDriver {
         Ok(())
     }
 
+    /// Zero position an actuator with standard range (0 to 2π)
+    fn zero_actuator_standard(&mut self, actuator_id: u8) -> PyResult<()> {
+        let driver = self.driver.as_mut()
+            .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Not connected"))?;
+            
+        self.rt.block_on(async {
+            driver.zero_actuator_standard(actuator_id).await
+        }).map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+        
+        Ok(())
+    }
+
+    /// Zero position an actuator with centered range (-π to +π)
+    fn zero_actuator_centered(&mut self, actuator_id: u8) -> PyResult<()> {
+        let driver = self.driver.as_mut()
+            .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Not connected"))?;
+            
+        self.rt.block_on(async {
+            driver.zero_actuator_centered(actuator_id).await
+        }).map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+        
+        Ok(())
+    }
+
     /// Get current state of an actuator
     fn get_actuator_state(&mut self, actuator_id: u8) -> PyResult<PyActuatorState> {
         let driver = self.driver.as_mut()
@@ -224,7 +248,7 @@ impl PyRobstrideDriver {
         Ok(PyActuatorState::from(state))
     }
 
-    /// Send a command to an actuator  
+    /// Send a command to an actuator 
     fn send_command(&mut self, actuator_id: u8, command: PyActuatorCommand) -> PyResult<()> {
         let driver = self.driver.as_mut()
             .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Not connected"))?;
@@ -259,6 +283,41 @@ impl PyRobstrideDriver {
             
         let result = self.rt.block_on(async {
             driver.read_raw_parameter(actuator_id, param_index).await
+        }).map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+        
+        Ok(result)
+    }
+
+    /// Read a single parameter from actuator using Communication type 17
+    fn read_single_parameter(&mut self, actuator_id: u8, param_index: u64) -> PyResult<Option<f64>> {
+        let driver = self.driver.as_mut()
+            .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Not connected"))?;
+            
+        let result = self.rt.block_on(async {
+            driver.read_single_parameter(actuator_id, param_index as u16).await
+        }).map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+        
+        match result {
+            Some(crate::parameters::ParameterValue::Float(f)) => Ok(Some(f as f64)),
+            Some(crate::parameters::ParameterValue::Uint8(u)) => Ok(Some(u as f64)),
+            Some(crate::parameters::ParameterValue::Uint16(u)) => Ok(Some(u as f64)),
+            Some(crate::parameters::ParameterValue::Uint32(u)) => Ok(Some(u as f64)),
+            Some(crate::parameters::ParameterValue::Int16(i)) => Ok(Some(i as f64)),
+            Some(crate::parameters::ParameterValue::Int32(i)) => Ok(Some(i as f64)),
+            Some(crate::parameters::ParameterValue::String(_)) => {
+                Err(PyErr::new::<pyo3::exceptions::PyValueError, _>("String parameters not supported by read_single_parameter"))
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// Read raw single parameter data 
+    fn read_single_parameter_raw(&mut self, actuator_id: u8, param_index: u64) -> PyResult<Option<Vec<u8>>> {
+        let driver = self.driver.as_mut()
+            .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Not connected"))?;
+            
+        let result = self.rt.block_on(async {
+            driver.read_single_parameter_raw(actuator_id, param_index as u16).await
         }).map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
         
         Ok(result)
