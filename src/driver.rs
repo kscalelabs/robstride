@@ -5,7 +5,6 @@ use crate::can::CanInterface;
 use crate::client::ActuatorClient;
 use crate::protocol::ActuatorRequestParams;
 use crate::types::{ActuatorCommand, ActuatorState};
-use crate::parameters::{ParameterInfo, ParameterValue, get_parameter_table};
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::timeout;
@@ -92,38 +91,6 @@ impl RobstrideDriver {
         }
 
         Ok(all_discovered)
-    }
-
-    /// Create ObtainId request frame (universal for all actuator types)
-    fn create_obtain_id_request(&self, can_id: u8) -> crate::can::CanFrame {
-        use crate::can::{CanFrame, CAN_MAX_DLEN};
-
-        let mut frame = CanFrame::default();
-        frame.can_id = 0x8000_0000; // EFF flag
-        frame.len = 8;
-        frame.len8_dlc = 8;
-
-        // Pack ObtainId request data
-        frame.can_data[0] = can_id; // actuator_can_id
-        frame.can_data[1] = 0xFD; // host_id low byte
-        frame.can_data[2] = 0x00; // host_id high byte
-        frame.can_data[3] = 0x00; // mux = 0x00 for ObtainId
-                                  // rest default to zeros
-
-        frame
-    }
-
-    /// Check if response frame is for the specified CAN ID
-    fn is_response_for_can_id(&self, frame: &crate::can::CanFrame, expected_can_id: u8) -> bool {
-        // Check mux is 0x00 (ObtainId response)
-        let mux = frame.can_data[3] & 0x1F;
-        if mux != 0x00 {
-            return false;
-        }
-
-        // For ObtainId response, actuator_can_id is at bytes 1-2 (u16 little endian)
-        let response_can_id = frame.can_data[1] as u16 | ((frame.can_data[2] as u16) << 8);
-        response_can_id as u8 == expected_can_id
     }
 
     /// Get the interface name
@@ -310,6 +277,22 @@ impl RobstrideDriver {
         self.can_interface.send_frame(&request).await?;
 
         // Wait for response
+        let response = timeout(Duration::from_secs(1), self.can_interface.recv_frame()).await??;
+        client.handle_response(&response)?;
+
+        Ok(())
+    }
+
+    pub async fn zero_actuator(&mut self, can_id: u8) -> crate::Result<()> {
+        let client = self
+            .clients
+            .get_mut(&can_id)
+            .ok_or(crate::RobstrideError::ActuatorNotFound(can_id))?;
+
+        let request = client.stage_request(&ActuatorRequestParams::ZeroPosition);
+        self.can_interface.send_frame(&request).await?;
+
+        // Wait for response (zero position returns feedback response)
         let response = timeout(Duration::from_secs(1), self.can_interface.recv_frame()).await??;
         client.handle_response(&response)?;
 

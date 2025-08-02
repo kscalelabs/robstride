@@ -219,6 +219,33 @@ def disable(ctx, ids):
 
 @cli.command()
 @click.option('--ids', required=True, help='Comma-separated actuator IDs (e.g., 11,12,13)')
+@click.pass_context
+def zero(ctx, ids):
+    """Zero the position of actuators (set current position as zero)"""
+    interfaces = ctx.obj['interfaces']
+    actuator_ids = parse_ids(ids)
+    
+    click.echo(f"Zeroing position for actuators: {actuator_ids}")
+    
+    success_count = 0
+    for actuator_id in actuator_ids:
+        result = get_actuator_driver(actuator_id, interfaces)
+        if result:
+            driver, interface = result
+            try:
+                driver.zero_actuator(actuator_id)
+                click.echo(f"Actuator {actuator_id} position zeroed on {interface}")
+                success_count += 1
+            except Exception as e:
+                click.echo(f"Actuator {actuator_id} zero failed: {e}")
+        else:
+            click.echo(f"Actuator {actuator_id} not found on any interface")
+    
+    click.echo(f"Zeroed {success_count}/{len(actuator_ids)} actuators")
+
+
+@cli.command()
+@click.option('--ids', required=True, help='Comma-separated actuator IDs (e.g., 11,12,13)')
 @click.option('--pos', type=float, help='Target position in radians')
 @click.option('--vel', type=float, help='Target velocity in rad/s')
 @click.option('--torque', type=float, help='Target torque in Nm')

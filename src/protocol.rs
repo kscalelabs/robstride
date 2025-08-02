@@ -2,11 +2,10 @@
 //!
 //! Extracted from firmware/src/robstride.rs
 
-use crate::actuator_types::{RangeSet, RobstrideActuatorType};
 use crate::can::{CanFrame, CAN_MAX_DLEN};
-use crate::types::{ActuatorCommand, ActuatorFeedbackUpdate};
+use crate::types::ActuatorCommand;
 use bytemuck::{Pod, Zeroable};
-use tracing::{debug, warn};
+use tracing::warn;
 
 pub trait RobstrideActuatorFrame {}
 
@@ -166,6 +165,40 @@ pub struct FeedbackResponse {
 
 impl RobstrideActuatorFrame for FeedbackResponse {}
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Pod, Zeroable)]
+#[repr(C, packed)]
+pub struct ZeroPositionRequest {
+    pub actuator_can_id: u8,
+    pub host_id: u16,
+    mux: u8, /* 0x06 */
+    len: u8,
+    pad: u8,
+    res0: u8,
+    len8_dlc: u8,
+    can_data: [u8; CAN_MAX_DLEN],
+}
+
+impl RobstrideActuatorFrame for ZeroPositionRequest {}
+
+impl ZeroPositionRequest {
+    pub fn new(host_id: u16, actuator_can_id: u8) -> Self {
+        let mut request = Self {
+            mux: 0x06,
+            host_id,
+            actuator_can_id,
+            len: 8,
+            ..Default::default()
+        };
+        // Set the specific data bytes as per bash script: 01.01.CD.00.00.00.00.00
+        // Byte[0] = 1 as per manual
+        request.can_data[0] = 0x01;
+        request.can_data[1] = 0x01;
+        request.can_data[2] = 0xCD;
+        // Remaining bytes stay as 0x00 from Default
+        request
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum ActuatorRequest {
     ObtainId(ObtainIdRequest),
@@ -173,6 +206,7 @@ pub enum ActuatorRequest {
     MotorEnable(MotorEnableRequest),
     Feedback(FeedbackRequest),
     ReadAllParams(ReadAllParamsRequest),
+    ZeroPosition(ZeroPositionRequest),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -182,6 +216,7 @@ pub enum ActuatorRequestParams {
     Control(ActuatorCommand),
     Feedback,
     ReadAllParams(u64), // mcu_uid required
+    ZeroPosition,
 }
 
 #[derive(Debug, Clone)]
@@ -211,6 +246,7 @@ impl From<ActuatorRequest> for CanFrame {
             ActuatorRequest::MotorEnable(req) => req.into(),
             ActuatorRequest::Feedback(req) => req.into(),
             ActuatorRequest::ReadAllParams(req) => req.into(),
+            ActuatorRequest::ZeroPosition(req) => req.into(),
         }
     }
 }
@@ -262,6 +298,7 @@ impl ActuatorRequest {
             Self::MotorEnable(_) => 0x02,
             Self::Feedback(_) => 0x02,
             Self::ReadAllParams(_) => 0x13,
+            Self::ZeroPosition(_) => 0x02, // Zero position returns feedback response
         }
     }
 }

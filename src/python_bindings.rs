@@ -200,6 +200,18 @@ impl PyRobstrideDriver {
         Ok(())
     }
 
+    /// Zero position an actuator (set current position as zero)
+    fn zero_actuator(&mut self, actuator_id: u8) -> PyResult<()> {
+        let driver = self.driver.as_mut()
+            .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Not connected"))?;
+            
+        self.rt.block_on(async {
+            driver.zero_actuator(actuator_id).await
+        }).map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+        
+        Ok(())
+    }
+
     /// Get current state of an actuator
     fn get_actuator_state(&mut self, actuator_id: u8) -> PyResult<PyActuatorState> {
         let driver = self.driver.as_mut()

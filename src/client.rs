@@ -1,7 +1,7 @@
 use crate::actuator_types::{RangeSet, RobstrideActuatorType};
 use crate::can::CanFrame;
 use crate::protocol::{ActuatorRequest, ActuatorRequestParams, ActuatorResponse, FeedbackResponse, ReadAllParamsRequest};
-use crate::types::{ActuatorCommand, ActuatorFeedbackUpdate};
+use crate::types::ActuatorFeedbackUpdate;
 use tracing::debug;
 
 #[derive(Debug)]
@@ -49,6 +49,7 @@ impl ActuatorClient {
     pub fn build_request(&self, params: &ActuatorRequestParams) -> ActuatorRequest {
         use crate::protocol::{
             ControlCommandRequest, FeedbackRequest, MotorEnableRequest, ObtainIdRequest,
+            ZeroPositionRequest,
         };
 
         match params {
@@ -83,6 +84,9 @@ impl ActuatorClient {
                         .kp
                         .scale_value(cmd.kp, &self.can_range.kp) as u16,
                 ))
+            }
+            ActuatorRequestParams::ZeroPosition => {
+                ActuatorRequest::ZeroPosition(ZeroPositionRequest::new(self.host_id, self.actuator_can_id))
             }
         }
     }
