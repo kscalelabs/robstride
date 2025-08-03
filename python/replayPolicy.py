@@ -200,8 +200,8 @@ async def replay(ndjson:str, kinfer:str, scale:float=1.0, ids:list[int] or None 
                     position=0.0,
                     velocity=0.0,   
                     torque=time_step_data[driver][actuator_id],
-                    kp = 50.0, #kp_leg[actuator_id],
-                    kd =2.0 #kd_leg[actuator_id]
+                    kp = 0.0, #kp_leg[actuator_id],
+                    kd = 0.0 #kd_leg[actuator_id]
                 )
                 #print(str(command))                 #print(driver)                  #print(actuator_id)
                 driver.send_command(actuator_id, command)
@@ -209,11 +209,23 @@ async def replay(ndjson:str, kinfer:str, scale:float=1.0, ids:list[int] or None 
                 #    iqf_amps[time_idx][actuator_id] = driver.read_raw_parameter(int(actuator_id), param_index = iqf_hex)
                 #time_step_commands.append((actuator_id, command))
             #driver.send_command_batch(time_step_commands)
-    
+    for driver in data_by_driver[0].keys():
+        for actuator_id in data_by_driver[0][driver].keys():
+            command = PyActuatorCommand(
+                position=0.0,
+                velocity=0.0,   
+                torque=0.0,
+                kp = 0.0, 
+                kd = 0.0 
+            )
+            driver.send_command(actuator_id, command)
+
     if log:
         logs = [iqf_amps]
         with open("./log_replay.json", "w") as f:
             json.dump(logs, f, indent=4)
+
+
 
 
 def run_replay(ndjson:str, kinfer:str, scale:float, ids:list[int] or None, log:bool = True):
