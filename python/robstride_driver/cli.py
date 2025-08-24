@@ -8,6 +8,7 @@ import sys
 import time
 import json
 import os
+import struct
 from typing import List, Optional, Dict, Tuple
 from robstride_driver import PyRobstrideDriver, PyActuatorCommand, PyRobstrideActuatorType
 
@@ -316,14 +317,20 @@ def scan(ctx, start_id, end_id, output_format):
 
 @cli.command()
 @click.option('--ids', required=True, help='Comma-separated actuator IDs (e.g., 11,12,13)')
-@click.option('--param', type=int, help='Specific parameter index to dump (hex, e.g., 0x2000)')
+@click.option('--param', type=str, help='Specific parameter index to dump (hex, e.g., 0x2000)')
 @click.option('--format', 'output_format', type=click.Choice(['table', 'json', 'raw']), default='table', help='Output format')
 @click.option('--filter', type=str, help='Filter parameters by name pattern (case-insensitive)')
+@click.option('--parse', type=click.Choice(['little', 'big']), default=None, help="Parse the output as Little-end or Big-endian binary list")
 @click.pass_context
-def dump(ctx, ids, param, output_format, filter):
+def dump(ctx, ids, param, output_format, filter, parse):
     """Dump parameters from actuators with proper decoding"""
     interfaces = ctx.obj['interfaces']
     actuator_ids = parse_ids(ids)
+
+    try:
+        param = int(param, 16)
+    except Exception as e:
+        click.echo(f"Cannot parse {param} as hex: {e}")
     
     # Collect parameters from all actuators
     all_parameters = {}  # {actuator_id: {param_index: raw_bytes}}
@@ -343,6 +350,7 @@ def dump(ctx, ids, param, output_format, filter):
                     data = driver.read_raw_parameter(actuator_id, param)
                     if data:
                         all_parameters[actuator_id] = {param: data}
+
                     else:
                         click.echo(f"No data received for parameter 0x{param:04x}")
                         all_parameters[actuator_id] = {}
@@ -351,7 +359,8 @@ def dump(ctx, ids, param, output_format, filter):
                     click.echo(f"Reading all parameters from actuator {actuator_id} on {interface}...")
                     params = driver.dump_all_parameters(actuator_id)
                     if params:
-                        all_parameters[actuator_id] = {idx: bytes(data) for idx, data in params.items()}
+                        all_parameters[actuator_id] = {idx: data for idx, data in params.items()}
+                        #all_parameters[actuator_id] = {idx: data for idx, data in params.items()}
                         click.echo(f"  Retrieved {len(params)} parameters")
                         
                         # Auto-detect servo type from firmware version
@@ -372,7 +381,27 @@ def dump(ctx, ids, param, output_format, filter):
     if not valid_actuators:
         click.echo("No parameters retrieved from any actuators")
         return
+
+    if parse:
+        for aid, params in valid_actuators.items():
+            for idx, data in params.items():
+                # Handle both bytes and list of integers
+                if isinstance(data, list):
+                    # Convert list of integers to bytes, then unpack as float
+                    data_bytes = bytes(data)
+                    if parse == 'little':
+                        valid_actuators[aid][idx] = struct.unpack('<f', data_bytes[:4])[0]  # 4-byte float
+                    elif parse == 'big':
+                        valid_actuators[aid][idx] = struct.unpack('>f', data_bytes[:4])[0]  # 4-byte float
+                else:
+                    # Data is bytes, use struct.unpack
+                    if parse == 'little':
+                        valid_actuators[aid][idx] = struct.unpack('<f', data[:4])[0]  # 4-byte float
+                    elif parse == 'big':
+                        valid_actuators[aid][idx] = struct.unpack('>f', data[:4])[0]  # 4-byte float
+                print(valid_actuators[aid][idx])
     
+
     # Display results based on format
     if output_format == 'raw':
         display_parameters_raw(valid_actuators, actuator_interfaces)

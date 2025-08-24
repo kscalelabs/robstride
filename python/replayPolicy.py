@@ -59,6 +59,7 @@ def parse_policy(ndjson: str, kinfer_file: Path, scale: float = 1.0, ids: list[i
 
     # Build kinfer2motorid as a list where index is kinfer index, value is motor id
     kinfer2motorid = [name2motorid[name] for name in joint_names]
+    #print(kinfer2motorid)
 
     # If ids is provided, build a set for fast lookup and a mapping from motor id to kinfer index
     if ids is not None:
