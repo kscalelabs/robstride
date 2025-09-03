@@ -1,6 +1,6 @@
 #!/bin/bash
 
-for i in {0..4}
+for i in {0..6}
 do
     echo "Setting up can$i..."
     sudo ip link set can$i down

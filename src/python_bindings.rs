@@ -334,6 +334,30 @@ impl PyRobstrideDriver {
         
         Ok(result)
     }
+
+     /// Write a single float parameter to actuator using Communication type 18
+     fn write_single_parameter_float(&mut self, actuator_id: u8, param_index: u64, value: f64) -> PyResult<()> {
+        let driver = self.driver.as_mut()
+            .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Not connected"))?;
+            
+        self.rt.block_on(async {
+            driver.write_single_parameter_float(actuator_id, param_index as u16, value as f32).await
+        }).map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+        
+        Ok(())
+    }
+
+    /// Save motor data using Communication type 22
+    fn save_motor_data(&mut self, actuator_id: u8) -> PyResult<()> {
+        let driver = self.driver.as_mut()
+            .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Not connected"))?;
+            
+        self.rt.block_on(async {
+            driver.save_motor_data(actuator_id).await
+        }).map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+        
+        Ok(())
+    }
         
 
     /// Scan multiple CAN interfaces for actuators (static method)
