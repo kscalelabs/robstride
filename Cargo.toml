@@ -14,7 +14,7 @@ name = "robstride_driver"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-socket2 = "0.5"
+socket2 = { version = "0.5.10", features = ["all"] }
 tokio = { version = "1", features = ["net", "io-util", "macros", "rt-multi-thread", "time"] }
 bytemuck = { version = "1.18", features = ["derive", "must_cast"] }
 tracing = "0.1"
