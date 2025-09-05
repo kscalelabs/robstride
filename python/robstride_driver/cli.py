@@ -217,25 +217,70 @@ def disable(ctx, ids):
     click.echo(f"Disabled {success_count}/{len(actuator_ids)} actuators")
 
 
+ACTUATOR_ID_TO_SERVO_TYPE = {
+    # Left arm
+    11: "RS03",  # dof_left_shoulder_pitch_03
+    12: "RS03",  # dof_left_shoulder_roll_03
+    13: "RS02",  # dof_left_shoulder_yaw_02
+    14: "RS02",  # dof_left_elbow_02
+    15: "RS00",  # dof_left_wrist_00
+    # Right arm
+    21: "RS03",  # dof_right_shoulder_pitch_03
+    22: "RS03",  # dof_right_shoulder_roll_03
+    23: "RS02",  # dof_right_shoulder_yaw_02
+    24: "RS02",  # dof_right_elbow_02
+    25: "RS00",  # dof_right_wrist_00
+    # Left leg
+    31: "RS04",  # dof_left_hip_pitch_04
+    32: "RS03",  # dof_left_hip_roll_03
+    33: "RS03",  # dof_left_hip_yaw_03
+    34: "RS04",  # dof_left_knee_04
+    35: "RS02",  # dof_left_ankle_02
+    # Right leg
+    41: "RS04",  # dof_right_hip_pitch_04
+    42: "RS03",  # dof_right_hip_roll_03
+    43: "RS03",  # dof_right_hip_yaw_03
+    44: "RS04",  # dof_right_knee_04
+    45: "RS02",  # dof_right_ankle_02
+}
+
 @cli.command()
 @click.option('--ids', required=True, help='Comma-separated actuator IDs (e.g., 11,12,13)')
 @click.option('--standard', is_flag=True, help='Use standard zero (0 to 2π range) instead of default centered (-π to +π)')
+@click.option('--offset', type=float, help='Additional offset to apply (-7 to 7)')
 @click.pass_context
-def zero(ctx, ids, standard):
+def zero(ctx, ids, standard, offset):
     """Zero position actuators (set current position as zero)
     
     By default uses centered zero (-π to +π range) which sets zero_sta=1, saves parameters, then zeros.
     Use --standard flag for 0 to 2π range which sets zero_sta=0, saves parameters, then zeros.
+    
+    Optional --offset parameter writes an additional offset to the servo-specific add_offset parameter:
+    - RS00: parameter 0x2024 (add_offset)
+    - RS02: parameter 0x2021 (add_offset) 
+    - RS03: parameter 0x2027 (add_offset)
+    - RS04: parameter 0x2029 (add_offset)
     """
     interfaces = ctx.obj['interfaces']
     actuator_ids = parse_ids(ids)
     
+    # Validate offset range
+    if offset is not None and (offset < -7.0 or offset > 7.0):
+        click.echo(f"Error: Offset must be between -7 and 7, got {offset}", err=True)
+        sys.exit(1)
+    
     if standard:
-        click.echo(f"Setting standard zero (0 to 2π) for actuators: {actuator_ids}")
-        click.echo("This will: 1) Set zero_sta=0, 2) Save parameters, 3) Zero position")
+        action_description = "Setting standard zero (0 to 2π) for actuators"
+        steps = "1) Set zero_sta=0, 2) Save parameters, 3) Zero position"
     else:
-        click.echo(f"Setting centered zero (-π to +π) for actuators: {actuator_ids}")
-        click.echo("This will: 1) Set zero_sta=1, 2) Save parameters, 3) Zero position")
+        action_description = "Setting centered zero (-π to +π) for actuators"
+        steps = "1) Set zero_sta=1, 2) Save parameters, 3) Zero position"
+    
+    if offset is not None:
+        steps += f", 4) Write offset={offset}"
+    
+    click.echo(f"{action_description}: {actuator_ids}")
+    click.echo(f"This will: {steps}")
     
     success_count = 0
     
@@ -244,12 +289,47 @@ def zero(ctx, ids, standard):
         if result:
             driver, interface = result
             try:
+                # Step 1-3: Standard zero process
                 if standard:
                     driver.zero_actuator_standard(actuator_id)
                     click.echo(f"Actuator {actuator_id} standard zero completed on {interface}")
                 else:
                     driver.zero_actuator_centered(actuator_id)
                     click.echo(f"Actuator {actuator_id} centered zero completed on {interface}")
+                
+                # Step 4: Apply offset if specified
+                if offset is not None:
+                    try:
+                        # Use hardcoded mapping instead of reading firmware version
+                        servo_type = ACTUATOR_ID_TO_SERVO_TYPE.get(actuator_id)
+                        
+                        if servo_type is not None:
+                            # Map servo type to offset parameter
+                            offset_param_map = {
+                                "RS00": 0x2024,  # add_offset
+                                "RS02": 0x2021,  # add_offset
+                                "RS03": 0x2027,  # add_offset
+                                "RS04": 0x2029,  # add_offset
+                            }
+                            
+                            if servo_type in offset_param_map:
+                                offset_param = offset_param_map[servo_type]
+                                print(f"Writing offset {offset} to parameter 0x{offset_param:04X}")
+                                
+                                # Write the offset parameter
+                                driver.write_single_parameter_float(actuator_id, offset_param, offset)
+                                
+                                # Save the parameter
+                                driver.save_motor_data(actuator_id)
+                                
+                                click.echo(f"Actuator {actuator_id} ({servo_type}) offset {offset} written to parameter 0x{offset_param:04X}")
+                            else:
+                                click.echo(f"Warning: Unknown servo type '{servo_type}' for actuator {actuator_id}, offset not applied")
+                        else:
+                            click.echo(f"Warning: Actuator {actuator_id} not in known servo type mapping, offset not applied")
+                            
+                    except Exception as e:
+                        click.echo(f"Warning: Failed to apply offset to actuator {actuator_id}: {e}")
                 
                 success_count += 1
             except Exception as e:
